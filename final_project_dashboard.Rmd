@@ -1,0 +1,307 @@
+---
+title: 'Final Project 4a: Final Dashboard'
+author: "Emilio Estrada"
+date: "`r Sys.Date()`"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: rows
+    vertical_layout: scroll
+---
+
+Dashboard
+=====================================
+
+<details>
+<summary><strong>Click to load and view the codebook</strong></summary>
+
+```{r load-data, echo=TRUE}
+#Loading in National Immunization Survey-Teen Data from 2023
+source("/Users/emilioestrada/Downloads/NISTEENPUF23.R")
+```
+</details> <!-- Add a blank line after this to prevent wrapping everything else -->
+
+Row {data-height=500}
+-------------------------------------
+
+### HTML Widget 1
+
+
+```{r}
+library(dplyr)
+library(survey)
+library(plotly)
+
+# Create survey design object, filtering out rows with missing weights
+nis_design <- svydesign(
+  ids = ~1,
+  weights = ~PROVWT_C,
+  data = subset(NISTEENPUF23, !is.na(PROVWT_C))
+)
+
+# Compute weighted HPV uptake by education, race, and region
+agg_data <- svyby(
+  ~P_UTDHPV,                      # Real indicator for HPV vaccination status
+  ~EDUC1 + RACEETHK + CEN_REG,    # Grouping variables
+  design = nis_design,
+  FUN = svymean,
+  vartype = "ci",
+  na.rm = TRUE
+)
+
+# Rename and format for plotting
+agg_data <- agg_data %>%
+  rename(
+    education = EDUC1,
+    race = RACEETHK,
+    region = CEN_REG,
+    uptake = `P_UTDHPVUTD`,                      
+    ci_lower = `ci_l.P_UTDHPVUTD`,
+    ci_upper = `ci_u.P_UTDHPVUTD`
+  ) %>%
+  mutate(
+    uptake = round(uptake * 100, 1),
+    ci_lower = round(ci_lower * 100, 1),
+    ci_upper = round(ci_upper * 100, 1)
+  ) %>%
+  filter(race == "NON-HISPANIC BLACK ONLY")  # Only keep NH Black teens
+
+# Define levels
+region_levels <- unique(agg_data$region)
+race_levels <- "NON-HISPANIC BLACK ONLY"
+
+# Create traces for plotly
+traces <- list()
+for (reg in region_levels) {
+  reg_data <- filter(agg_data, region == reg)
+
+  for (race in race_levels) {
+    race_data <- filter(reg_data, race == race)
+
+    traces <- c(traces, list(
+      list(
+        x = race_data$education,
+        y = race_data$uptake,
+        type = "bar",
+        name = race,
+        error_y = list(
+          type = "data",
+          array = race_data$ci_upper - race_data$uptake,
+          arrayminus = race_data$uptake - race_data$ci_lower
+        ),
+        visible = if (reg == region_levels[1]) TRUE else FALSE,
+        text = paste0("Race: ", race_data$race,
+                      "<br>Uptake: ", race_data$uptake, "%",
+                      "<br>CI: [", race_data$ci_lower, ", ", race_data$ci_upper, "]"),
+        hoverinfo = "text"
+      )
+    ))
+  }
+}
+
+# Create dropdown buttons by region
+buttons <- list()
+num_traces_per_region <- length(race_levels)
+for (i in seq_along(region_levels)) {
+  visibility <- rep(FALSE, length(traces))
+  start_idx <- (i - 1) * num_traces_per_region + 1
+  end_idx   <- i * num_traces_per_region
+  visibility[start_idx:end_idx] <- TRUE
+
+  buttons[[i]] <- list(
+    method = "update",
+    args = list(list(visible = visibility),
+                list(title = paste("Adolescent HPV Vaccine Uptake - Region:", region_levels[i]))),
+    label = region_levels[i]
+  )
+}
+
+# Build the plotly object
+p <- plot_ly()
+for (trace in traces) {
+  p <- add_trace(p,
+                 x = trace$x,
+                 y = trace$y,
+                 type = trace$type,
+                 name = trace$name,
+                 error_y = trace$error_y,
+                 visible = trace$visible,
+                 text = trace$text,
+                 hoverinfo = trace$hoverinfo,
+                 textfont = list(size = 24),
+                 textposition = "inside")
+}
+
+# Layout and display
+p <- layout(p,
+            title = paste("Adolescent Non-Hispanic HPV Vaccine Uptake", region_levels[1]),
+            xaxis = list(title = "Maternal Education Level", tickfont = list(size = 7), titlefont = list(size = 12)),
+            yaxis = list(
+              title = "Percentage of Teenagers Vaccinated",
+              titlefont = list(size = 16),
+              tickfont = list(size = 14),
+              range = c(0, 100)
+            ),
+            barmode = "group",
+            updatemenus = list(
+              list(
+                type = "dropdown",
+                active = 0,
+                buttons = buttons,
+                x = 1.45,
+                xanchor = "right",
+                y = 0.65,
+                yanchor = "top"
+              )
+            ),
+            font = list(size = 14),
+            legend = list(font = list(size = 12)),
+            hoverlabel = list(font = list(size = 12)),
+            margin = list(
+              l = 80,
+              r = 40,
+              b = 250,
+              t = 100
+            ),
+            width = 700,
+            height = 600)
+
+p
+```
+
+### Key takeaways and description for HTML Widget 1
+The variable P_UTDHPV flags whether a teen has received at least one human papillomavirus (HPV) shot before their interview, based on provider-reported data. Here, we look at just non-Hispanic Black teenagers across maternal educational attainment levels to see the impact it has on teenager HPV vaccination uptake between U.S. Census regions. Notably, the highest HPV vaccine uptake for any region and maternal educational attainment interaction is less than 12 years in the West region group with 100% of participants having received at least one HPV shot before their interview, based on provider-reported data. The lowest HPV vaccine uptake is more than 12 years, non-college grad in the West region group with 59.2% of participants having received at least one HPV shot before their interview, based on provider-reported data. Across all regions, the Midwest region displays the highest HPV uptake by maternal educational attainment levels while the South region displays the lowest HPV uptake by maternal educational attainment levels non-Hispanic Black teenagers.
+
+---
+
+Row {data-height=450}
+-------------------------------------
+
+### HTML Widget 2 
+
+```{r}
+library(survey)
+library(dplyr)
+library(tidyr)
+library(plotly)
+
+# Step 1: Compute survey-weighted uptake by Region × Race
+region_race_data <- svyby(
+  ~P_UTDHPV,
+  ~interaction(RACEETHK, CEN_REG),
+  design = nis_design,
+  FUN = svymean,
+  vartype = "ci",
+  na.rm = TRUE
+)
+
+# Step 2: Separate race and region columns
+region_race_data <- region_race_data %>%
+  rename(interaction = `interaction(RACEETHK, CEN_REG)`) %>%
+  separate(interaction, into = c("race", "region"), sep = "\\.") %>%
+  mutate(P_UTDHPVUTD = round(P_UTDHPVUTD * 100, 1))
+
+# Step 3: Define mapping from region to states
+region_to_states <- list(
+  "NORTHEAST" = c("ME", "NH", "VT", "MA", "RI", "CT", "NY", "NJ", "PA"),
+  "MIDWEST"   = c("OH", "MI", "IN", "IL", "WI", "MN", "IA", "MO", "ND", "SD", "NE", "KS"),
+  "SOUTH"     = c("DE", "MD", "DC", "VA", "WV", "NC", "SC", "GA", "FL", "KY", "TN", "MS", "AL", "OK", "TX", "AR", "LA"),
+  "WEST"      = c("MT", "ID", "WY", "CO", "NM", "AZ", "UT", "NV", "WA", "OR", "CA", "AK", "HI")
+)
+
+# Step 4: Expand region to states
+region_race_expanded <- region_race_data %>%
+  rowwise() %>%
+  mutate(states = list(region_to_states[[region]])) %>%
+  unnest(cols = c(states)) %>%
+  rename(state = states)
+
+# Step 5: Create traces by race
+race_levels <- unique(region_race_expanded$race)
+traces <- list()
+
+for (i in seq_along(race_levels)) {
+  race_i <- race_levels[i]
+  df <- filter(region_race_expanded, race == race_i)
+  
+  traces[[i]] <- list(
+    z = df$P_UTDHPVUTD,
+    locations = df$state,
+    type = "choropleth",
+    locationmode = "USA-states",
+    text = paste("Race:", df$race, "<br>Region:", df$region, "<br>Uptake:", df$P_UTDHPVUTD, "%"),
+    hoverinfo = "text",
+    colorscale = list(c(0, "lavender"), c(0.5, "mediumorchid"), c(1, "indigo")),
+    reversescale = FALSE,
+    visible = i == 1,
+    name = race_i,
+  colorbar = list(
+    title = "HPV Uptake (%)",
+    len = 1  # Adjust this value to set the desired height
+  )
+)
+}
+
+# Step 6: Create dropdown buttons
+buttons <- lapply(seq_along(race_levels), function(i) {
+  visible_vec <- rep(FALSE, length(race_levels))
+  visible_vec[i] <- TRUE
+  
+  list(
+    method = "update",
+    args = list(list(visible = visible_vec),
+                list(title = paste("HPV Uptake by Region -", race_levels[i]))),
+    label = race_levels[i]
+  )
+})
+
+# Step 7: Build interactive map
+fig <- plot_ly()
+
+for (trace in traces) {
+  fig <- do.call(add_trace, c(list(p = fig), trace))
+}
+
+fig <- fig %>%
+  layout(
+    title = paste("HPV Uptake by Region -", race_levels[1]),
+    geo = list(
+      scope = "usa",
+      projection = list(type = "albers usa"),
+      showlakes = TRUE,
+      lakecolor = toRGB("white")
+    ),
+    margin = list(l = 50, r = 50, t = 120, b = 80),
+    updatemenus = list(list(
+      active = 0,
+      buttons = buttons,
+      x = 0,
+      xanchor = "left",
+      y = 1.5,
+      yanchor = "top",
+      font = list(size = 10),  # Adjust font size for smaller text
+      pad = list(t = 1.5, b = 1.5, l = 1.5, r = 1.5)  # Reduce padding for a smaller button
+    ))
+  )
+
+
+fig
+```
+
+### Key takeaways and description for HTML Widget 2
+The variable P_UTDHPV flags whether a teen has received at least one human papillomavirus (HPV) shot before their interview, based on provider-reported data. Here, we look at a map showing how the states are grouped by U.S. Census region and seeing where HPV uptakes are highest by race and region. Across all regions, the Hispanic population has the highest HPV vaccination uptake while the non-Hispanic White only population has the lowest HPV vaccination uptake. The Midwest region has the highest HPV vaccination uptake across all race groups while the West and South regions are pretty even with lowest highest HPV vaccination uptake across all race groups. The highest HPV vaccine uptake for any region and race interaction is Non-Hispanic Black only Midwest population with an 85.1% uptake of participants having received at least one HPV shot before their interview, based on provider-reported data. The lowest HPV vaccine uptake is Non-Hispanic Black only West population with 69.8% of participants having received at least one HPV shot before their interview, based on provider-reported data.
+
+## Real-world impact 
+**Real-world impact**: The project findings highlight critical geographic and racial disparities in HPV vaccine uptake, with non-Hispanic Black teens in the Midwest and Hispanic teens overall showing notably high vaccination rates, while the South and West lag behind—especially among non-Hispanic White teens. The findings can guide region- and population-specific outreach strategies to improve vaccine equity and reduce HPV-related cancer risks.
+
+Dataset Description
+=====================================
+
+## Dataset Description
+- **Data source**: The data source comes from the Centers for Disease Control and Prevention's 2023 National Immunization Survey-Teen (NIS-Teen), URL: https://ftp.cdc.gov/pub/Vaccines_NIS/NISTEENPUF23.R.
+- **Sample size**: 42,920 teens from the U.S. and other territories have completed household interviews. Of the 41,194 age-eligible teens (excluding territories) who completed household interviews, 16,568 had provider-verified vaccination histories, which is key to note since 1) the survey weight is based on provider-verified data and 2) the uptake variable P_UTDHPV flags if the provider verified at least one HPV shot before an interview.
+- **Data collection**: The data was collected via household interviews with provider-verified vaccination histories.
+- **Study population**: From January 5, 2023 to December 30, 2023, data was collected from non-institutionalized adolescents ages 13-17  living in U.S. households.
+
+
+
+
