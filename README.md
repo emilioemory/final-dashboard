@@ -17,6 +17,9 @@ Built using `flexdashboard`, `plotly`, and `survey` in R.
 
 [View the Live Dashboard](https://emilioemory.github.io/final-dashboard/)
 
----
 
-- **Data source**: The data source comes from the Centers for Disease Control and Prevention's 2023 National Immunization Survey-Teen (NIS-Teen), URL: https://ftp.cdc.gov/pub/Vaccines_NIS/NISTEENPUF23.R.
+**Data source**: The data source comes from the Centers for Disease Control and Prevention's 2023 National Immunization Survey-Teen (NIS-Teen), URL: https://ftp.cdc.gov/pub/Vaccines_NIS/NISTEENPUF23.R.
+
+###  Real-world impact
+
+The project findings highlight critical geographic and racial disparities in HPV vaccine uptake, with non-Hispanic Black teens in the Midwest and Hispanic teens overall showing notably high vaccination rates, while the South and West lag behind—especially among non-Hispanic White teens. The findings can guide region- and population-specific outreach strategies to improve vaccine equity and reduce HPV-related cancer risks.
